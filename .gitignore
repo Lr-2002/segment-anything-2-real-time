@@ -8,3 +8,6 @@ build/*
 _C.*
 outputs/*
 checkpoints/*.pt
+checkpoints
+tmp
+~/.config/nvim/.backup
