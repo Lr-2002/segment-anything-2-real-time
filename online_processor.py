@@ -35,7 +35,7 @@ class OnlineProcessor:
     def build_model(self):
         return build_sam2_camera_predictor(self.model_cfg, self.sam2_checkpoint)
 
-    def reset(self, frame, text_prompt="person", confidence_threshold=0.35):
+    def reset(self, frame, text_prompt="object", confidence_threshold=0.35):
         """Reset the tracker with a new frame and text prompt"""
         try:
             # Reset internal state
@@ -234,3 +234,13 @@ if __name__=='__main__':
     # Process all images in directory
     processor.process_image_dirs('/ssd/lt/processed_dataset/lt_sim_seged/val/video_EiQKGXdvcmtlcl8wMDFfZXBfMTRfMDZfMDZfMjIQIxguIAMw6AkqIGY1MjU4NTI4N2ExNTc2Yjg1ZGZiYzI5OWI0OTgxMWZj/images/')
     # processor.process_video("../notebooks/videos/aquarium/aquarium.mp4", "./output_frames")
+    
+    
+    """.git/
+    
+    1. init 
+    2. reset 
+    3. for loop
+        add_frame 
+    
+    """
