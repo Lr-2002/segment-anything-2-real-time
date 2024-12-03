@@ -10,10 +10,10 @@ import tempfile
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 torch.autocast(device_type="cuda", dtype=torch.bfloat16).__enter__()
 
-if torch.cuda.get_device_properties(0).major >= 8:
-    # turn on tfloat32 for Ampere GPUs (https://pytorch.org/docs/stable/notes/cuda.html#tensorfloat-32-tf32-on-ampere-devices)
-    torch.backends.cuda.matmul.allow_tf32 = True
-    torch.backends.cudnn.allow_tf32 = True
+# if torch.cuda.get_device_properties(0).major >= 8:
+#     # turn on tfloat32 for Ampere GPUs (https://pytorch.org/docs/stable/notes/cuda.html#tensorfloat-32-tf32-on-ampere-devices)
+#     torch.backends.cuda.matmul.allow_tf32 = True
+#     torch.backends.cudnn.allow_tf32 = True
 
 from sam2.build_sam import build_sam2_camera_predictor
 from grounding_processor import GroundingDINOProcessor
@@ -30,13 +30,25 @@ class OnlineProcessor:
         self.ann_frame_idx = 0
         self.obj_ids = []
         self.text_prompt = None
-        self.confidence_threshold = 0.2
+        self.confidence_threshold = 0.1
         self.output_dict = {"cond_frame_outputs": {}}  # Initialize output_dict
 
     def build_model(self):
         return build_sam2_camera_predictor(self.model_cfg, self.sam2_checkpoint)
 
-    def reset(self, frame, text_prompt="object", confidence_threshold=0.35):
+    def reset_with_bbox(self, frame, bboxes, obj_ids):
+        """Reset the tracker with a new frame and bounding boxes"""
+        return self.reset(frame, boxes=bboxes, obj_ids=obj_ids)
+        
+    def frame_check(self, frame, is_rgb=True):
+        frame_rgb = frame
+        if len(frame.shape) == 2:
+            frame_rgb = cv2.cvtColor(frame, cv2.COLOR_GRAY2RGB)
+        if not is_rgb:
+            frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        return frame_rgb
+
+    def reset(self, frame, text_prompt="object", confidence_threshold=0.1, is_rgb=True, boxes=None, obj_ids=None):
         """Reset the tracker with a new frame and text prompt"""
         try:
             # Reset internal state
@@ -48,21 +60,20 @@ class OnlineProcessor:
             self.output_dict = {"cond_frame_outputs": {}}
 
             # Convert frame to RGB if needed
-            if len(frame.shape) == 2:
-                frame_rgb = cv2.cvtColor(frame, cv2.COLOR_GRAY2RGB)
-            else:
-                frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            frame_rgb = self.frame_check(frame, is_rgb)
+            if boxes is None and obj_ids is None:
+                torch.cuda.empty_cache()
 
-            # Get initial bounding boxes from Grounding DINO
-            boxes, obj_ids = self.box_estimator.get_initial_bboxes(
-                frame_rgb, 
-                text_prompt,
-                confidence_threshold=confidence_threshold
-            )
-            
+
+                boxes, obj_ids = self.box_estimator.get_initial_bboxes(
+                    frame_rgb, 
+                    text_prompt,
+                    confidence_threshold=confidence_threshold
+                )
+                
             if len(boxes) == 0:
                 print(f"No objects detected with prompt '{text_prompt}'")
-                return False
+                raise ValueError(f"No objects detected with prompt '{text_prompt}'")
             
             print(f"Detected {len(boxes)} objects with prompt '{text_prompt}'")
             print(f"Object IDs: {obj_ids}")
@@ -79,7 +90,7 @@ class OnlineProcessor:
             for box, obj_id in zip(boxes, obj_ids):
                 self.add_new_prompt(bbox=box, obj_id=obj_id)
             
-            return True
+            return True, (boxes, obj_id)
             
         except Exception as e:
             print(f"Critical error in reset: {str(e)}")
@@ -229,7 +240,8 @@ if __name__=='__main__':
     processor.reset(
         frame=cv2.imread('/ssd/lt/processed_dataset/lt_sim_seged/val/video_EiQKGXdvcmtlcl8wMDFfZXBfMTRfMDZfMDZfMjIQIxguIAMw6AkqIGY1MjU4NTI4N2ExNTc2Yjg1ZGZiYzI5OWI0OTgxMWZj/images/00000.jpg'),
         text_prompt="object",  # Adjust this prompt based on what objects you want to detect
-        confidence_threshold=0.1
+        confidence_threshold=0.1,
+        is_rgb=False
     )
     
     # Process all images in directory
