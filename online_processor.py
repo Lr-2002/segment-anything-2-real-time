@@ -16,7 +16,7 @@ if torch.cuda.get_device_properties(0).major >= 8:
     torch.backends.cudnn.allow_tf32 = True
 
 from sam2.build_sam import build_sam2_camera_predictor
-from grounding_processor import get_initial_bboxes
+from grounding_processor import GroundingDINOProcessor
 import time
 
 class OnlineProcessor:
@@ -25,6 +25,7 @@ class OnlineProcessor:
         self.model_cfg = model_cfg
         self.sam2_checkpoint = sam2_checkpoint
         self.predictor = self.build_model()
+        self.box_estimator = GroundingDINOProcessor()
         self.if_init = False
         self.ann_frame_idx = 0
         self.obj_ids = []
@@ -53,7 +54,7 @@ class OnlineProcessor:
                 frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
 
             # Get initial bounding boxes from Grounding DINO
-            boxes, obj_ids = get_initial_bboxes(
+            boxes, obj_ids = self.box_estimator.get_initial_bboxes(
                 frame_rgb, 
                 text_prompt,
                 confidence_threshold=confidence_threshold
