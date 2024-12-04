@@ -48,7 +48,7 @@ class OnlineProcessor:
             frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         return frame_rgb
 
-    def reset(self, frame, text_prompt="object", confidence_threshold=0.1, is_rgb=True, boxes=None, obj_ids=None):
+    def reset(self, frame, text_prompt="object.", confidence_threshold=0.1, is_rgb=True, boxes=None, obj_ids=None):
         """Reset the tracker with a new frame and text prompt"""
         try:
             # Reset internal state
@@ -239,7 +239,7 @@ if __name__=='__main__':
     # Initialize with text prompt to automatically detect objects
     processor.reset(
         frame=cv2.imread('/ssd/lt/processed_dataset/lt_sim_seged/val/video_EiQKGXdvcmtlcl8wMDFfZXBfMTRfMDZfMDZfMjIQIxguIAMw6AkqIGY1MjU4NTI4N2ExNTc2Yjg1ZGZiYzI5OWI0OTgxMWZj/images/00000.jpg'),
-        text_prompt="object",  # Adjust this prompt based on what objects you want to detect
+        text_prompt="object.",  # Adjust this prompt based on what objects you want to detect
         confidence_threshold=0.1,
         is_rgb=False
     )
