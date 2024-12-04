@@ -10,8 +10,8 @@ class GroundingDINOProcessor:
     def __init__(self, model_id: str = "IDEA-Research/grounding-dino-tiny"):
         """Initialize the Grounding DINO processor"""
         self.model_id = model_id
-        # self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        self.device = torch.device("cpu")
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        # self.device = torch.device("cpu")
         print(f"Initializing GroundingDINOProcessor on device: {self.device}")
         
         try:
@@ -94,27 +94,25 @@ class GroundingDINOProcessor:
                 #     torch.cuda.synchronize()
                 
                 print(f"Running inference with text prompt: '{text_prompt}'")
-                print(f"Available GPU memory: {torch.cuda.get_device_properties(0).total_memory / 1e9:.2f}GB")
-                print(f"Current GPU memory usage: {torch.cuda.memory_allocated() / 1e9:.2f}GB")
+                if torch.cuda.is_available():
+                    print(f"Available GPU memory: {torch.cuda.get_device_properties(0).total_memory / 1e9:.2f}GB")
+                    print(f"Current GPU memory usage: {torch.cuda.memory_allocated() / 1e9:.2f}GB")
                 
                 try:
                     with torch.no_grad():
                         # Ensure model is in eval mode
                         # self.model.eval()
                         
-                        # Run inference in try-except block
                         try:
                             outputs = self.model(**inputs)
-                            if torch.cuda.is_available():
-                                torch.cuda.synchronize()
                         except RuntimeError as e:
                             if "out of memory" in str(e):
                                 print("GPU OOM error, clearing cache and retrying...")
                                 if torch.cuda.is_available():
                                     torch.cuda.empty_cache()
-                                    torch.cuda.synchronize()
                                 outputs = self.model(**inputs)
                             else:
+                                print(f"Error during model inference: {str(e)}")
                                 raise e
                     
                     # Post-process outputs
