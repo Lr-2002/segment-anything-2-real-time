@@ -69,6 +69,8 @@ class GroundingDINOProcessor:
         # 基于IoU过滤agents
         agents_to_remove = set()
         for i in agents:
+            if len(agents) - len(agents_to_remove) <= 1:
+                break
             for j in range(len(bboxes)):
                 if i == j:
                     continue
