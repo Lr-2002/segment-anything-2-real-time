@@ -25,9 +25,10 @@ class GroundingDINOProcessor:
             print(f"Error loading model: {e}")
             raise
 
-    @staticmethod
-    def calculate_iou(bbx1: List[float], bbx2: List[float]) -> Tuple[float, float]:
-        """Calculate IoU between two bounding boxes."""
+
+
+    def calculate_iou(self, bbx1, bbx2):
+        """计算两个边界框的IOU（Intersection over Union）。"""
         x1 = max(bbx1[0], bbx2[0])
         y1 = max(bbx1[1], bbx2[1])
         x2 = min(bbx1[2], bbx2[2])
@@ -37,10 +38,62 @@ class GroundingDINOProcessor:
         area1 = (bbx1[2] - bbx1[0]) * (bbx1[3] - bbx1[1])
         area2 = (bbx2[2] - bbx2[0]) * (bbx2[3] - bbx2[1])
         
+        # 计算相交面积对两个边界框面积的比例
         ratio1 = intersection / area1 if area1 > 0 else 0
         ratio2 = intersection / area2 if area2 > 0 else 0
         
         return ratio1, ratio2
+
+    def calculate_area(self, bbox):
+        """计算单个边界框的面积"""
+        x1, y1, x2, y2 = bbox
+        return (x2 - x1) * (y2 - y1)
+
+    def update_bboxes(self, bboxes, image_width, image_height):
+        """更新和过滤边界框"""
+        height_threshold = 0.01 * image_height
+        width_threshold = 0.01 * image_width
+        agents = []
+        
+        # 找到靠近图像边界的边界框
+        for i, bbox in enumerate(bboxes):
+            x1, y1, x2, y2 = bbox
+            if (
+                x1 <= width_threshold or                # 靠近左边界
+                x2 >= (image_width - width_threshold) or # 靠近右边界
+                y1 <= height_threshold or               # 靠近上边界
+                y2 >= (image_height - height_threshold) # 靠近下边界
+            ):
+                agents.append(i)
+
+        # 基于IoU过滤agents
+        agents_to_remove = set()
+        for i in agents:
+            for j in range(len(bboxes)):
+                if i == j:
+                    continue
+                ious = self.calculate_iou(bboxes[i], bboxes[j])
+                if i != j and (ious[0] > 0.9 or ious[1] > 0.9):
+                    agents_to_remove.add(i)
+                    break
+        
+        # 计算非agent边界框的平均面积
+        non_agent_bboxes = [bbox for i, bbox in enumerate(bboxes) if i not in agents_to_remove]
+        non_agent_areas = [self.calculate_area(bbox) for bbox in non_agent_bboxes]
+        mean_area = np.mean(non_agent_areas) if non_agent_areas else 0
+        
+        # 移除过大的非agent边界框
+        final_bboxes = []
+        final_indices = []
+        
+        for i, bbox in enumerate(bboxes):
+            if i not in agents_to_remove:
+                area = self.calculate_area(bbox)
+                if (i in agents and i not in agents_to_remove) or area <= 5 * mean_area:
+                    final_bboxes.append(bbox)
+                    final_indices.append(i)
+        
+        return np.array(final_bboxes), final_indices
 
     def get_initial_bboxes(
         self,
@@ -134,10 +187,12 @@ class GroundingDINOProcessor:
                     mask = scores >= confidence_threshold
                     boxes = boxes[mask]
                     
-                    # Create object IDs
-                    obj_ids = list(range(len(boxes)))
-                    
-                    return boxes, obj_ids
+                    if len(boxes) > 0:
+                        filtered_boxes, filtered_indices = self.update_bboxes(boxes, pil_image.size[0], pil_image.size[1])
+                        obj_ids = list(range(len(filtered_boxes)))
+                        return filtered_boxes, obj_ids
+                    else:
+                        raise Exception("No objects detected after confidence filtering")
                     
                 except Exception as e:
                     print(f"Error during model inference: {str(e)}")
