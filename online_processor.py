@@ -236,16 +236,18 @@ if __name__=='__main__':
         sam2_checkpoint="checkpoints/sam2_hiera_large.pt"
     )
     
+    video_id = 'video_EiYKGXdvcmtlcl8xNTJfZXBfMTBfMDZfMDZfMjIQ-AIYmQMgCDDyCyogZjUyNTg1Mjg3YTE1NzZiODVkZmJjMjk5YjQ5ODExZmM='
+    # video_id = 'video_EiQKGXdvcmtlcl8wMDFfZXBfMTRfMDZfMDZfMjIQIxguIAMw6AkqIGY1MjU4NTI4N2ExNTc2Yjg1ZGZiYzI5OWI0OTgxMWZj'
     # Initialize with text prompt to automatically detect objects
     processor.reset(
-        frame=cv2.imread('/ssd/lt/processed_dataset/lt_sim_seged/val/video_EiQKGXdvcmtlcl8wMDFfZXBfMTRfMDZfMDZfMjIQIxguIAMw6AkqIGY1MjU4NTI4N2ExNTc2Yjg1ZGZiYzI5OWI0OTgxMWZj/images/00000.jpg'),
+        frame=cv2.imread(f'/ssd/lt/processed_dataset/lt_sim_seged/val/{video_id}/images/00000.jpg'),
         text_prompt="object.",  # Adjust this prompt based on what objects you want to detect
         confidence_threshold=0.1,
         is_rgb=False
     )
     
     # Process all images in directory
-    processor.process_image_dirs('/ssd/lt/processed_dataset/lt_sim_seged/val/video_EiQKGXdvcmtlcl8wMDFfZXBfMTRfMDZfMDZfMjIQIxguIAMw6AkqIGY1MjU4NTI4N2ExNTc2Yjg1ZGZiYzI5OWI0OTgxMWZj/images/')
+    processor.process_image_dirs(f'/ssd/lt/processed_dataset/lt_sim_seged/val/{video_id}/images/')
     # processor.process_video("../notebooks/videos/aquarium/aquarium.mp4", "./output_frames")
     
     
