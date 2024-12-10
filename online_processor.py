@@ -121,94 +121,100 @@ class OnlineProcessor:
 
     def add_frame(self, frame):
         """Process a new frame and return masks"""
-        try:
+        # try:
             # Convert frame to RGB if needed
-            if len(frame.shape) != 3 or frame.shape[2] != 3:
-                raise ValueError("Input frame must be a 3-channel color image")
-            
-            frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB) if isinstance(frame, np.ndarray) else frame
-            width, height = frame_rgb.shape[:2][::-1]
-            
-            if not self.if_init:
-                print("Initializing tracker with first frame...")
-                self.predictor.load_first_frame(frame_rgb)
-                self.if_init = True
-                return np.array([])
-            
-            if len(self.obj_ids) == 0:
-                print("No objects to track")
-                return np.array([])
-            
-            # Track objects in current frame
-            try:
-                out_obj_ids, out_mask_logits = self.predictor.track(frame_rgb)
-            except Exception as track_error:
-                print(f"Error during tracking: {str(track_error)}")
-                import traceback
-                traceback.print_exc()
-                return np.array([])
-            
-            if len(out_obj_ids) == 0:
-                print(f"Frame {self.ann_frame_idx + 1}: No objects tracked")
-                return np.array([])
-            
-            # Update frame index and store results
-            self.ann_frame_idx += 1
-            
-            # Convert masks to numpy arrays with proper error handling
-            masks = []
-            try:
-                for i, obj_id in enumerate(out_obj_ids):
-                    mask = (out_mask_logits[i] > 0.0).permute(1,2,0).cpu().numpy()
-                    mask = (mask * 255).astype(np.uint8)
-                    masks.append(mask)
-                    
-                    # Store detailed tracking info in output_dict
-                    if obj_id not in self.output_dict["cond_frame_outputs"].get(self.ann_frame_idx, {}):
-                        self.output_dict["cond_frame_outputs"][self.ann_frame_idx] = {}
-                    
-                    self.output_dict["cond_frame_outputs"][self.ann_frame_idx][obj_id] = {
-                        "mask": mask,
-                        "confidence": float((out_mask_logits[i] > 0.0).float().mean().item()),
-                        "frame_size": (width, height)
-                    }
-            except Exception as mask_error:
-                print(f"Error processing masks: {str(mask_error)}")
-                import traceback
-                traceback.print_exc()
-            
-            # Stack masks if we have any
-            masks = np.stack(masks, axis=0) if masks else np.array([])
-            
-            # Log tracking status
-            print(f"Frame {self.ann_frame_idx} - Tracked {len(masks)} objects")
-            print(f"Frame {self.ann_frame_idx} - Object IDs: {out_obj_ids}")
-            
-            return masks
-            
-        except Exception as e:
-            print(f"Critical error in add_frame: {str(e)}")
+        if len(frame.shape) != 3 or frame.shape[2] != 3:
+            raise ValueError("Input frame must be a 3-channel color image")
+        
+        frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB) if isinstance(frame, np.ndarray) else frame
+        width, height = frame_rgb.shape[:2][::-1]
+        
+        if not self.if_init:
+            print("Initializing tracker with first frame...")
+            self.predictor.load_first_frame(frame_rgb)
+            self.if_init = True
+            return np.array([])
+        
+        if len(self.obj_ids) == 0:
+            print("No objects to track")
+            return np.array([])
+        
+        # Track objects in current frame
+        # try:
+        out_obj_ids, out_mask_logits = self.predictor.track(frame_rgb)
+        # except Exception as track_error:
+            # print(f"Error during tracking: {str(track_error)}")
+            # import traceback
+            # traceback.print_exc()
+            # return np.array([])
+        
+        if len(out_obj_ids) == 0:
+            print(f"Frame {self.ann_frame_idx + 1}: No objects tracked")
+            return np.array([])
+        
+        # Update frame index and store results
+        self.ann_frame_idx += 1
+        
+        # Convert masks to numpy arrays with proper error handling
+        masks = []
+        try:
+            for i, obj_id in enumerate(out_obj_ids):
+                mask = (out_mask_logits[i] > 0.0).permute(1,2,0).cpu().numpy()
+                mask = (mask * 255).astype(np.uint8)
+                masks.append(mask)
+                
+                # Store detailed tracking info in output_dict
+                if obj_id not in self.output_dict["cond_frame_outputs"].get(self.ann_frame_idx, {}):
+                    self.output_dict["cond_frame_outputs"][self.ann_frame_idx] = {}
+                
+                self.output_dict["cond_frame_outputs"][self.ann_frame_idx][obj_id] = {
+                    "mask": mask,
+                    "confidence": float((out_mask_logits[i] > 0.0).float().mean().item()),
+                    "frame_size": (width, height)
+                }
+        except Exception as mask_error:
+            print(f"Error processing masks: {str(mask_error)}")
             import traceback
             traceback.print_exc()
-            return np.array([])
+        
+        # Stack masks if we have any
+        masks = np.stack(masks, axis=0) if masks else np.array([])
+        
+        # Log tracking status
+        print(f"Frame {self.ann_frame_idx} - Tracked {len(masks)} objects")
+        print(f"Frame {self.ann_frame_idx} - Object IDs: {out_obj_ids}")
+        
+        return masks
+            
+        # except Exception as e:
+        #     print(f"Critical error in add_frame: {str(e)}")
+        #     import traceback
+        #     traceback.print_exc()
+        #     return np.array([])
 
     def process_video(self, video_path, output_folder):
         """Process a video file and save masks"""
         cap = cv2.VideoCapture(video_path)
         cnt = 0
+        os.makedirs(output_folder, exist_ok=True)
+        video_masks = []
         while True:
             ret, frame = cap.read()
             if not ret:
                 break
             processed_frame = self.add_frame(frame)
+            video_masks.append(processed_frame)
             for idx, mask in enumerate(processed_frame):
-                cv2.imwrite(os.path.join(output_folder, str(cnt) + '_' + str(idx) + '.png'), mask)
+                saved=cv2.imwrite(os.path.join(output_folder, str(cnt) + '_' + str(idx) + '.png'), mask)
+                if not saved:
+                    print(f"Failed to save mask {cnt}_{idx}.png")
             cnt += 1
         cap.release()
+        return np.stack(video_masks, axis=0)
 
     def process_image_dirs(self, image_dir):
         """Process all images in a directory and save masks"""
-        image_list = sorted(glob.glob(os.path.join(image_dir, '*.jpg')))
+        image_list = sorted(glob.glob(os.path.join(image_dir, '*.png')))
         cnt = 0
         for image_path in tqdm(image_list, desc="Processing images"):
             frame = cv2.imread(image_path)
@@ -233,24 +239,29 @@ if __name__=='__main__':
     # Create processor without initial bboxes
     processor = OnlineProcessor(
         model_cfg="sam2_hiera_l.yaml",
-        sam2_checkpoint="checkpoints/sam2_hiera_large.pt"
+        sam2_checkpoint="segment/checkpoints/sam2_hiera_large.pt"
     )
     
     video_id = 'video_EiYKGXdvcmtlcl8xNTJfZXBfMTBfMDZfMDZfMjIQ-AIYmQMgCDDyCyogZjUyNTg1Mjg3YTE1NzZiODVkZmJjMjk5YjQ5ODExZmM='
     # video_id = 'video_EiQKGXdvcmtlcl8wMDFfZXBfMTRfMDZfMDZfMjIQIxguIAMw6AkqIGY1MjU4NTI4N2ExNTc2Yjg1ZGZiYzI5OWI0OTgxMWZj'
     # Initialize with text prompt to automatically detect objects
     processor.reset(
-        frame=cv2.imread(f'/ssd/lt/processed_dataset/lt_sim_seged/val/{video_id}/images/00000.jpg'),
+
+        frame=cv2.imread('segment/tmp/language_table_0.png'),
+
         text_prompt="object.",  # Adjust this prompt based on what objects you want to detect
-        confidence_threshold=0.1,
-        is_rgb=False
+        confidence_threshold=0.1
     )
     
     # Process all images in directory
-    processor.process_image_dirs(f'/ssd/lt/processed_dataset/lt_sim_seged/val/{video_id}/images/')
-    # processor.process_video("../notebooks/videos/aquarium/aquarium.mp4", "./output_frames")
-    
-    
+
+    # processor.process_image_dirs('/home/ziheng/taichang/projects/language-table/tmp')
+    processor.process_video("/home/ziheng/taichang/projects/language-table/segment/language_table.mp4", "output_frames")
+    # for i in range(len(os.listdir('/home/ziheng/taichang/projects/language-table/tmp'))):
+    #     dir = os.listdir('/home/ziheng/taichang/projects/language-table/tmp')[i]
+    #     frame = cv2.imread(f'/home/ziheng/taichang/projects/language-table/tmp/'+dir)
+    #     processor.add_frame(frame)
+
     """.git/
     
     1. init 

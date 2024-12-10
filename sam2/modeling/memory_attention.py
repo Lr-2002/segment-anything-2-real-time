@@ -9,11 +9,13 @@ from typing import Optional
 import torch
 from torch import nn, Tensor
 
-from sam2.modeling.sam.transformer import RoPEAttention
+# from sam2.modeling.sam.transformer import RoPEAttention
+from algorithms.oawm.lt_sim_random_step.segment.sam2.modeling.sam.transformer import RoPEAttention
 
 from sam2.modeling.sam2_utils import get_activation_fn, get_clones
 
-
+import sys
+sys.modules['algorithms.oawm.lt_sim_random_step.segment.sam2.modeling.sam.transformer'] = sys.modules['sam2.modeling.sam.transformer']
 class MemoryAttentionLayer(nn.Module):
 
     def __init__(
