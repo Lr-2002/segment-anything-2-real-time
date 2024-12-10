@@ -242,21 +242,26 @@ if __name__=='__main__':
         sam2_checkpoint="segment/checkpoints/sam2_hiera_large.pt"
     )
     
+    video_id = 'video_EiYKGXdvcmtlcl8xNTJfZXBfMTBfMDZfMDZfMjIQ-AIYmQMgCDDyCyogZjUyNTg1Mjg3YTE1NzZiODVkZmJjMjk5YjQ5ODExZmM='
+    # video_id = 'video_EiQKGXdvcmtlcl8wMDFfZXBfMTRfMDZfMDZfMjIQIxguIAMw6AkqIGY1MjU4NTI4N2ExNTc2Yjg1ZGZiYzI5OWI0OTgxMWZj'
     # Initialize with text prompt to automatically detect objects
     processor.reset(
+
         frame=cv2.imread('segment/tmp/language_table_0.png'),
+
         text_prompt="object.",  # Adjust this prompt based on what objects you want to detect
         confidence_threshold=0.1
     )
     
     # Process all images in directory
+
     # processor.process_image_dirs('/home/ziheng/taichang/projects/language-table/tmp')
     processor.process_video("/home/ziheng/taichang/projects/language-table/segment/language_table.mp4", "output_frames")
     # for i in range(len(os.listdir('/home/ziheng/taichang/projects/language-table/tmp'))):
     #     dir = os.listdir('/home/ziheng/taichang/projects/language-table/tmp')[i]
     #     frame = cv2.imread(f'/home/ziheng/taichang/projects/language-table/tmp/'+dir)
     #     processor.add_frame(frame)
-    
+
     """.git/
     
     1. init 
