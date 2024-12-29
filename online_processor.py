@@ -61,7 +61,6 @@ class OnlineProcessor:
             output_path (str): Path to save the annotated image. Default is "annotated_image.png".
         """
 
-
         # Convert the RGB frame to BGR for OpenCV
         frame_bgr = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
 
@@ -77,7 +76,7 @@ class OnlineProcessor:
         cv2.imwrite(output_path, frame_bgr)
 
         print(f"Annotated image saved to {output_path}")
-    
+
     def reset(
         self,
         frame,
@@ -86,7 +85,7 @@ class OnlineProcessor:
         is_rgb=True,
         boxes=None,
         obj_ids=None,
-        id = 0
+        id=0,
     ):
         """Reset the tracker with a new frame and text prompt"""
         try:
@@ -114,8 +113,11 @@ class OnlineProcessor:
             print(f"Detected {len(boxes)} objects with prompt '{text_prompt}'")
             print(f"Object IDs: {obj_ids}")
             import os
+
             os.makedirs("annotation", exist_ok=True)
-            self.annotate_and_save_image(boxes, frame_rgb, output_path=f"annotation/annotated_image_{id}.png")
+            self.annotate_and_save_image(
+                boxes, frame_rgb, output_path=f"annotation/annotated_image_{id}.png"
+            )
             # Reset predictor state (safe to call now with our new check)
             self.predictor.reset_state()
 
@@ -307,18 +309,19 @@ if __name__ == "__main__":
     # video_id = 'video_EiYKGXdvcmtlcl8xNTJfZXBfMTBfMDZfMDZfMjIQ-AIYmQMgCDDyCyogZjUyNTg1Mjg3YTE1NzZiODVkZmJjMjk5YjQ5ODExZmM='
     # video_id = 'video_EiQKGXdvcmtlcl8wMDFfZXBfMTRfMDZfMDZfMjIQIxguIAMw6AkqIGY1MjU4NTI4N2ExNTc2Yjg1ZGZiYzI5OWI0OTgxMWZj'
     # Initialize with text prompt to automatically detect objects
-    images = os.listdir('/home/ziheng/oawm_dev/original_images')
-    for i,image in enumerate(images):
+    image_path = "output_images"
+    images = os.listdir(image_path)
+    for i, image in enumerate(images):
         processor.reset(
-            frame=cv2.imread('/home/ziheng/oawm_dev/original_images/'+image),
-            text_prompt="robot.",  # Adjust this prompt based on what objects you want to detect
-            confidence_threshold=0.05,
-            id=i
+            frame=cv2.imread(os.path.join(image_path, image)),
+            text_prompt="object.robot.",  # Adjust this prompt based on what objects you want to detect
+            confidence_threshold=0.1,
+            id=i,
         )
-    
+
     # Process all images in directory
 
-    # processor.process_image_dirs('/home/ziheng/taichang/projects/language-table/tmp')
+    # processor.process_image_dirs('')
     # processor.process_video(
     #     "/home/ziheng/taichang/projects/language-table/segment/language_table.mp4",
     #     "output_frames",
