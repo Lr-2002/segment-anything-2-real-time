@@ -4,9 +4,10 @@ import torch
 import numpy as np
 import cv2
 import imageio
-import sys 
+import sys
 import glob
 import tempfile
+
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 torch.autocast(device_type="cuda", dtype=torch.bfloat16).__enter__()
 
@@ -18,6 +19,7 @@ torch.autocast(device_type="cuda", dtype=torch.bfloat16).__enter__()
 from sam2.build_sam import build_sam2_camera_predictor
 from grounding_processor import GroundingDINOProcessor
 import time
+
 
 class OnlineProcessor:
     def __init__(self, model_cfg, sam2_checkpoint):
@@ -39,7 +41,7 @@ class OnlineProcessor:
     def reset_with_bbox(self, frame, bboxes, obj_ids):
         """Reset the tracker with a new frame and bounding boxes"""
         return self.reset(frame, boxes=bboxes, obj_ids=obj_ids)
-        
+
     def frame_check(self, frame, is_rgb=True):
         frame_rgb = frame
         if len(frame.shape) == 2:
@@ -48,7 +50,15 @@ class OnlineProcessor:
             frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         return frame_rgb
 
-    def reset(self, frame, text_prompt="object.", confidence_threshold=0.1, is_rgb=True, boxes=None, obj_ids=None):
+    def reset(
+        self,
+        frame,
+        text_prompt="object.",
+        confidence_threshold=0.1,
+        is_rgb=True,
+        boxes=None,
+        obj_ids=None,
+    ):
         """Reset the tracker with a new frame and text prompt"""
         try:
             # Reset internal state
@@ -64,23 +74,20 @@ class OnlineProcessor:
             if boxes is None and obj_ids is None:
                 torch.cuda.empty_cache()
 
-
                 boxes, obj_ids = self.box_estimator.get_initial_bboxes(
-                    frame_rgb, 
-                    text_prompt,
-                    confidence_threshold=confidence_threshold
+                    frame_rgb, text_prompt, confidence_threshold=confidence_threshold
                 )
-                
+
             if len(boxes) == 0:
                 print(f"No objects detected with prompt '{text_prompt}'")
                 raise ValueError(f"No objects detected with prompt '{text_prompt}'")
-            
+
             print(f"Detected {len(boxes)} objects with prompt '{text_prompt}'")
             print(f"Object IDs: {obj_ids}")
 
             # Reset predictor state (safe to call now with our new check)
             self.predictor.reset_state()
-            
+
             # Initialize first frame
             self.predictor.load_first_frame(frame_rgb)
 
@@ -89,9 +96,9 @@ class OnlineProcessor:
             # Add detected objects one by one
             for box, obj_id in zip(boxes, obj_ids):
                 self.add_new_prompt(bbox=box, obj_id=obj_id)
-            
+
             return True, (boxes, obj_id)
-            
+
         except Exception as e:
             print(f"Critical error in reset: {str(e)}")
             raise e
@@ -106,86 +113,103 @@ class OnlineProcessor:
     def add_new_prompt(self, points=None, labels=None, bbox=None, obj_id=None):
         """Add a new prompt for tracking"""
         if not self.if_init:
-            raise ValueError("Model is not initialized. Please initialize with a frame first.")
+            raise ValueError(
+                "Model is not initialized. Please initialize with a frame first."
+            )
         _, out_obj_ids, out_mask_logits = self.predictor.add_new_prompt(
-            frame_idx=self.ann_frame_idx, obj_id=obj_id, points=points, labels=labels, bbox=bbox
+            frame_idx=self.ann_frame_idx,
+            obj_id=obj_id,
+            points=points,
+            labels=labels,
+            bbox=bbox,
         )
         return out_obj_ids, out_mask_logits
 
     def batch_add_bbox(self, bbox_list=None, obj_id_list=None):
         """Add multiple bounding boxes at once"""
         if not self.if_init:
-            raise ValueError("Model is not initialized. Please initialize with a frame first.")
+            raise ValueError(
+                "Model is not initialized. Please initialize with a frame first."
+            )
         for bbox, obj_id in zip(bbox_list, obj_id_list):
             self.add_new_prompt(obj_id=obj_id, bbox=bbox)
 
     def add_frame(self, frame):
         """Process a new frame and return masks"""
         # try:
-            # Convert frame to RGB if needed
+        # Convert frame to RGB if needed
         if len(frame.shape) != 3 or frame.shape[2] != 3:
             raise ValueError("Input frame must be a 3-channel color image")
-        
-        frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB) if isinstance(frame, np.ndarray) else frame
+
+        frame_rgb = (
+            cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            if isinstance(frame, np.ndarray)
+            else frame
+        )
         width, height = frame_rgb.shape[:2][::-1]
-        
+
         if not self.if_init:
             print("Initializing tracker with first frame...")
             self.predictor.load_first_frame(frame_rgb)
             self.if_init = True
             return np.array([])
-        
+
         if len(self.obj_ids) == 0:
             print("No objects to track")
             return np.array([])
-        
+
         # Track objects in current frame
         # try:
         out_obj_ids, out_mask_logits = self.predictor.track(frame_rgb)
         # except Exception as track_error:
-            # print(f"Error during tracking: {str(track_error)}")
-            # import traceback
-            # traceback.print_exc()
-            # return np.array([])
-        
+        # print(f"Error during tracking: {str(track_error)}")
+        # import traceback
+        # traceback.print_exc()
+        # return np.array([])
+
         if len(out_obj_ids) == 0:
             print(f"Frame {self.ann_frame_idx + 1}: No objects tracked")
             return np.array([])
-        
+
         # Update frame index and store results
         self.ann_frame_idx += 1
-        
+
         # Convert masks to numpy arrays with proper error handling
         masks = []
         try:
             for i, obj_id in enumerate(out_obj_ids):
-                mask = (out_mask_logits[i] > 0.0).permute(1,2,0).cpu().numpy()
+                mask = (out_mask_logits[i] > 0.0).permute(1, 2, 0).cpu().numpy()
                 mask = (mask * 255).astype(np.uint8)
                 masks.append(mask)
-                
+
                 # Store detailed tracking info in output_dict
-                if obj_id not in self.output_dict["cond_frame_outputs"].get(self.ann_frame_idx, {}):
+                if obj_id not in self.output_dict["cond_frame_outputs"].get(
+                    self.ann_frame_idx, {}
+                ):
                     self.output_dict["cond_frame_outputs"][self.ann_frame_idx] = {}
-                
+
                 self.output_dict["cond_frame_outputs"][self.ann_frame_idx][obj_id] = {
                     "mask": mask,
-                    "confidence": float((out_mask_logits[i] > 0.0).float().mean().item()),
-                    "frame_size": (width, height)
+                    "confidence": float(
+                        (out_mask_logits[i] > 0.0).float().mean().item()
+                    ),
+                    "frame_size": (width, height),
                 }
         except Exception as mask_error:
             print(f"Error processing masks: {str(mask_error)}")
             import traceback
+
             traceback.print_exc()
-        
+
         # Stack masks if we have any
         masks = np.stack(masks, axis=0) if masks else np.array([])
-        
+
         # Log tracking status
         print(f"Frame {self.ann_frame_idx} - Tracked {len(masks)} objects")
         print(f"Frame {self.ann_frame_idx} - Object IDs: {out_obj_ids}")
-        
+
         return masks
-            
+
         # except Exception as e:
         #     print(f"Critical error in add_frame: {str(e)}")
         #     import traceback
@@ -205,7 +229,10 @@ class OnlineProcessor:
             processed_frame = self.add_frame(frame)
             video_masks.append(processed_frame)
             for idx, mask in enumerate(processed_frame):
-                saved=cv2.imwrite(os.path.join(output_folder, str(cnt) + '_' + str(idx) + '.png'), mask)
+                saved = cv2.imwrite(
+                    os.path.join(output_folder, str(cnt) + "_" + str(idx) + ".png"),
+                    mask,
+                )
                 if not saved:
                     print(f"Failed to save mask {cnt}_{idx}.png")
             cnt += 1
@@ -214,49 +241,54 @@ class OnlineProcessor:
 
     def process_image_dirs(self, image_dir):
         """Process all images in a directory and save masks"""
-        image_list = sorted(glob.glob(os.path.join(image_dir, '*.png')))
+        image_list = sorted(glob.glob(os.path.join(image_dir, "*.png")))
         cnt = 0
         for image_path in tqdm(image_list, desc="Processing images"):
             frame = cv2.imread(image_path)
             if frame is None:
                 continue
-            
+
             try:
                 masks = self.add_frame(frame)
                 if len(masks) > 0:  # Only save if we have valid masks
                     for idx, mask in enumerate(masks):
-                        output_path = os.path.join(image_dir, str(cnt) + '_' + str(idx) + '.png')
+                        output_path = os.path.join(
+                            image_dir, str(cnt) + "_" + str(idx) + ".png"
+                        )
                         print(f"Saving mask to: {output_path}")
                         cv2.imwrite(output_path, mask)
             except Exception as e:
                 print(f"Error processing frame {cnt}: {str(e)}")
                 import traceback
+
                 traceback.print_exc()
-            
+
             cnt += 1
 
-if __name__=='__main__':
+
+if __name__ == "__main__":
     # Create processor without initial bboxes
     processor = OnlineProcessor(
         model_cfg="sam2_hiera_l.yaml",
-        sam2_checkpoint="segment/checkpoints/sam2_hiera_large.pt"
+        sam2_checkpoint="checkpoints/sam2_hiera_large.pt",
     )
-    
-    video_id = 'video_EiYKGXdvcmtlcl8xNTJfZXBfMTBfMDZfMDZfMjIQ-AIYmQMgCDDyCyogZjUyNTg1Mjg3YTE1NzZiODVkZmJjMjk5YjQ5ODExZmM='
+
+    # video_id = 'video_EiYKGXdvcmtlcl8xNTJfZXBfMTBfMDZfMDZfMjIQ-AIYmQMgCDDyCyogZjUyNTg1Mjg3YTE1NzZiODVkZmJjMjk5YjQ5ODExZmM='
     # video_id = 'video_EiQKGXdvcmtlcl8wMDFfZXBfMTRfMDZfMDZfMjIQIxguIAMw6AkqIGY1MjU4NTI4N2ExNTc2Yjg1ZGZiYzI5OWI0OTgxMWZj'
     # Initialize with text prompt to automatically detect objects
     processor.reset(
-
-        frame=cv2.imread('segment/tmp/language_table_0.png'),
-
+        frame=cv2.imread("./init_frame.jpg"),
         text_prompt="object.",  # Adjust this prompt based on what objects you want to detect
-        confidence_threshold=0.1
+        confidence_threshold=0.1,
     )
-    
+
     # Process all images in directory
 
     # processor.process_image_dirs('/home/ziheng/taichang/projects/language-table/tmp')
-    processor.process_video("/home/ziheng/taichang/projects/language-table/segment/language_table.mp4", "output_frames")
+    processor.process_video(
+        "/home/ziheng/taichang/projects/language-table/segment/language_table.mp4",
+        "output_frames",
+    )
     # for i in range(len(os.listdir('/home/ziheng/taichang/projects/language-table/tmp'))):
     #     dir = os.listdir('/home/ziheng/taichang/projects/language-table/tmp')[i]
     #     frame = cv2.imread(f'/home/ziheng/taichang/projects/language-table/tmp/'+dir)
