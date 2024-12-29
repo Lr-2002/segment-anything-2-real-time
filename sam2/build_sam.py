@@ -7,9 +7,17 @@
 import logging
 
 import torch
-from hydra import compose
+from hydra import compose, initialize_config_module, initialize
 from hydra.utils import instantiate
 from omegaconf import OmegaConf
+from hydra.core.global_hydra import GlobalHydra
+
+
+def is_hydra_initialized():
+    try:
+        return GlobalHydra.instance().is_initialized()
+    except ValueError:
+        return False
 
 
 def build_sam2(
@@ -20,7 +28,6 @@ def build_sam2(
     hydra_overrides_extra=[],
     apply_postprocessing=True,
 ):
-
     if apply_postprocessing:
         hydra_overrides_extra = hydra_overrides_extra.copy()
         hydra_overrides_extra += [
@@ -84,6 +91,9 @@ def build_sam2_camera_predictor(
     hydra_overrides_extra=[],
     apply_postprocessing=True,
 ):
+    if not is_hydra_initialized():
+        # initialize_config_module(config_module="sam2/configs")
+        initialize(config_path="configs/")
     hydra_overrides = [
         "++model._target_=sam2.sam2_camera_predictor.SAM2CameraPredictor",
     ]
@@ -115,6 +125,7 @@ def build_sam2_camera_predictor(
     if mode == "eval":
         model.eval()
     return model
+
 
 def _load_checkpoint(model, ckpt_path):
     if ckpt_path is not None:
