@@ -50,6 +50,34 @@ class OnlineProcessor:
             frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         return frame_rgb
 
+    def annotate_and_save_image(self, bboxes, frame, output_path="annotated_image.png"):
+        """
+        Annotates an RGB frame with bounding boxes and saves it as a PNG file.
+
+        Parameters:
+            bboxes (np.ndarray): An array of shape (11, 4), where each row represents a bounding box
+                                in the format [x_min, y_min, x_max, y_max].
+            frame (np.ndarray): An RGB image of shape (180, 320, 3).
+            output_path (str): Path to save the annotated image. Default is "annotated_image.png".
+        """
+
+
+        # Convert the RGB frame to BGR for OpenCV
+        frame_bgr = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
+
+        # Draw each bounding box on the frame
+        for bbox in bboxes:
+            # Convert bounding box coordinates to integers
+            x_min, y_min, x_max, y_max = map(int, bbox)
+            # Draw a rectangle with a random color
+            color = tuple(np.random.randint(0, 256, size=3).tolist())
+            cv2.rectangle(frame_bgr, (x_min, y_min), (x_max, y_max), color, thickness=2)
+
+        # Save the annotated image as a PNG file
+        cv2.imwrite(output_path, frame_bgr)
+
+        print(f"Annotated image saved to {output_path}")
+    
     def reset(
         self,
         frame,
@@ -58,6 +86,7 @@ class OnlineProcessor:
         is_rgb=True,
         boxes=None,
         obj_ids=None,
+        id = 0
     ):
         """Reset the tracker with a new frame and text prompt"""
         try:
@@ -84,7 +113,9 @@ class OnlineProcessor:
 
             print(f"Detected {len(boxes)} objects with prompt '{text_prompt}'")
             print(f"Object IDs: {obj_ids}")
-
+            import os
+            os.makedirs("annotation", exist_ok=True)
+            self.annotate_and_save_image(boxes, frame_rgb, output_path=f"annotation/annotated_image_{id}.png")
             # Reset predictor state (safe to call now with our new check)
             self.predictor.reset_state()
 
@@ -276,19 +307,22 @@ if __name__ == "__main__":
     # video_id = 'video_EiYKGXdvcmtlcl8xNTJfZXBfMTBfMDZfMDZfMjIQ-AIYmQMgCDDyCyogZjUyNTg1Mjg3YTE1NzZiODVkZmJjMjk5YjQ5ODExZmM='
     # video_id = 'video_EiQKGXdvcmtlcl8wMDFfZXBfMTRfMDZfMDZfMjIQIxguIAMw6AkqIGY1MjU4NTI4N2ExNTc2Yjg1ZGZiYzI5OWI0OTgxMWZj'
     # Initialize with text prompt to automatically detect objects
-    processor.reset(
-        frame=cv2.imread("./init_frame.jpg"),
-        text_prompt="object.",  # Adjust this prompt based on what objects you want to detect
-        confidence_threshold=0.1,
-    )
-
+    images = os.listdir('/home/ziheng/oawm_dev/original_images')
+    for i,image in enumerate(images):
+        processor.reset(
+            frame=cv2.imread('/home/ziheng/oawm_dev/original_images/'+image),
+            text_prompt="robot.",  # Adjust this prompt based on what objects you want to detect
+            confidence_threshold=0.05,
+            id=i
+        )
+    
     # Process all images in directory
 
     # processor.process_image_dirs('/home/ziheng/taichang/projects/language-table/tmp')
-    processor.process_video(
-        "/home/ziheng/taichang/projects/language-table/segment/language_table.mp4",
-        "output_frames",
-    )
+    # processor.process_video(
+    #     "/home/ziheng/taichang/projects/language-table/segment/language_table.mp4",
+    #     "output_frames",
+    # )
     # for i in range(len(os.listdir('/home/ziheng/taichang/projects/language-table/tmp'))):
     #     dir = os.listdir('/home/ziheng/taichang/projects/language-table/tmp')[i]
     #     frame = cv2.imread(f'/home/ziheng/taichang/projects/language-table/tmp/'+dir)
