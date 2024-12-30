@@ -93,7 +93,7 @@ class GroundingDINOProcessor:
         for i, bbox in enumerate(bboxes):
             if i not in agents_to_remove:
                 area = self.calculate_area(bbox)
-                if (i in agents and i not in agents_to_remove) or area <= 1 / 8 * (
+                if (i in agents and i not in agents_to_remove) or area <= 0.025 * (
                     image_width * image_height
                 ):
                     final_bboxes.append(bbox)
