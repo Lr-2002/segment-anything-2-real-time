@@ -11,3 +11,7 @@ checkpoints/*.pt
 checkpoints
 tmp
 ~/.config/nvim/.backup
+annotation
+original_images
+output_images
+test_video
