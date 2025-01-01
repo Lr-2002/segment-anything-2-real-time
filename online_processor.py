@@ -470,6 +470,7 @@ if __name__ == "__main__":
     images = os.listdir(image_path)
     for i, image in enumerate(images[-1:]):
         image = cv2.imread(os.path.join(image_path, image))
+        image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
         image = cv2.resize(image, (640*2, 360*2))
         processor.reset(
             frame=image,
@@ -486,6 +487,7 @@ if __name__ == "__main__":
         # filtered_masks = filtered_masks.squeeze(0).permute(0,2,3,1).numpy()
         # filtered_masks = separate_connected_components(filtered_masks)
         # filtered_masks = remove_all_zero_masks(filtered_masks)
+        image = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
         visualize_and_save_masks(filtered_masks, image, f"output_images/{i}_th_frame")
 
     # Process all images in directory
