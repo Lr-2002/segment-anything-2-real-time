@@ -168,17 +168,16 @@ class OnlineProcessor:
             self.add_new_prompt(obj_id=obj_id, bbox=bbox)
 
     def add_frame(self, frame):
-        """Process a new frame and return masks"""
+        """
+        Process a new frame and return masks
+        notice: input must be rgb
+        """
         # try:
         # Convert frame to RGB if needed
         if len(frame.shape) != 3 or frame.shape[2] != 3:
             raise ValueError("Input frame must be a 3-channel color image")
 
-        frame_rgb = (
-            cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-            if isinstance(frame, np.ndarray)
-            else frame
-        )
+        frame_rgb = frame
         width, height = frame_rgb.shape[:2][::-1]
 
         if not self.if_init:
@@ -482,12 +481,12 @@ if __name__ == "__main__":
     images = os.listdir(image_path)
     for i, image in enumerate(images):
         frame = cv2.imread(os.path.join(image_path, image))
+        frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         image = frame
         processor.reset(
             frame=frame,
             text_prompt="object.robot.",  # Adjust this prompt based on what objects you want to detect
             confidence_threshold=0.05,
-            is_rgb=False,
             id=i,
         )
         masks = processor.add_frame(image)
