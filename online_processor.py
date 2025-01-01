@@ -168,17 +168,16 @@ class OnlineProcessor:
             self.add_new_prompt(obj_id=obj_id, bbox=bbox)
 
     def add_frame(self, frame):
-        """Process a new frame and return masks"""
+        """
+        Process a new frame and return masks
+        notice: input must be rgb
+        """
         # try:
         # Convert frame to RGB if needed
         if len(frame.shape) != 3 or frame.shape[2] != 3:
             raise ValueError("Input frame must be a 3-channel color image")
 
-        frame_rgb = (
-            cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-            if isinstance(frame, np.ndarray)
-            else frame
-        )
+        frame_rgb = frame
         width, height = frame_rgb.shape[:2][::-1]
 
         if not self.if_init:
@@ -298,31 +297,32 @@ class OnlineProcessor:
 
             cnt += 1
 
+
 def filter_out_overlapping_part_in_larger_ones(masks):
     """
     Process a set of object masks:
     1. Sort the masks by area size (descending order).
     2. Remove overlapping regions from larger masks with smaller masks.
-    
+
     Args:
         masks (np.ndarray): A NumPy array of size (N, H, W, 1) where 0 means nothing and 1 means accept.
-        
+
     Returns:
         np.ndarray: Processed masks of the same shape as input.
     """
     # Flatten the last dimension for easier processing (N, H, W)
     masks = masks.squeeze(-1)
-    
+
     # Compute the area of each mask
     areas = np.sum(masks, axis=(1, 2))
-    
+
     # Sort masks by area (ascending order)
     sorted_indices = np.argsort(areas)
     sorted_masks = masks[sorted_indices]
-    
+
     # Create an empty array to store the processed masks
     processed_masks = np.zeros_like(sorted_masks)
-    
+
     # Iterate through sorted masks and remove overlaps
     for i, mask in enumerate(sorted_masks):
         # Subtract all smaller masks that have already been added
@@ -330,14 +330,16 @@ def filter_out_overlapping_part_in_larger_ones(masks):
             mask = np.where(sorted_masks[j] > 0, 0, mask)
         # Add the updated mask to the processed masks
         processed_masks[i] = mask
-    
+
     # Restore the original order
     restored_masks = np.zeros_like(processed_masks)
     for i, idx in enumerate(sorted_indices):
         restored_masks[idx] = processed_masks[i]
-    
+
     # Add the last dimension back to match the input shape
     return restored_masks[..., np.newaxis]
+
+
 # def filter_mask_by_area_ratio(masks, area_threshold=0.001):
 #     """Filter masks based on the area ratio of the mask to the image, omitting masks with an area ratio below the threshold."""
 #     T,N,C,H,W = masks.shape
@@ -357,15 +359,17 @@ def filter_out_overlapping_part_in_larger_ones(masks):
 #     masked_tensor = masks * valid_mask_expanded
 #     return masked_tensor
 from scipy.ndimage import label
+
+
 def filter_mask_by_area_ratio(masks, area_threshold=0.001):
     """
     Filter masks based on the area ratio of connected components of the mask to the image,
     omitting connected components with an area ratio below the threshold.
-    
+
     Args:
         masks (torch.Tensor): A tensor of shape [T, N, C, H, W] containing binary masks.
         area_threshold (float): The minimum area ratio for a connected component to be valid.
-        
+
     Returns:
         torch.Tensor: A tensor of the same shape as input, with filtered masks.
     """
@@ -391,7 +395,7 @@ def filter_mask_by_area_ratio(masks, area_threshold=0.001):
                 # Iterate over each connected component
                 for component_id in range(1, num_features + 1):
                     # Extract the current connected component
-                    component = (labeled_mask == component_id)
+                    component = labeled_mask == component_id
 
                     # Calculate the area of the component
                     component_area = component.sum()
@@ -402,8 +406,9 @@ def filter_mask_by_area_ratio(masks, area_threshold=0.001):
 
     # Convert the filtered masks back to a torch tensor
     filtered_masks = torch.from_numpy(filtered_masks).to(masks.device)
-    
+
     return filtered_masks
+
 
 def remove_all_zero_masks(masks):
     """
@@ -422,6 +427,7 @@ def remove_all_zero_masks(masks):
 
     return non_zero_masks
 
+
 def separate_connected_components(input_masks):
     """
     Separates unconnected parts of an image mask into individual object masks.
@@ -434,25 +440,28 @@ def separate_connected_components(input_masks):
     """
     N, H, W, C = input_masks.shape
     assert C == 1, "Input masks must have a single channel (C=1)."
-    
+
     output_masks = []
-    
+
     for i in range(N):
         # Extract the single mask
         mask = input_masks[i, :, :, 0]
-        
+
         # Perform connected-component labeling
         labeled_mask, num_features = label(mask)
-        
+
         # Create a separate mask for each connected component
         for j in range(1, num_features + 1):
             component_mask = (labeled_mask == j).astype(np.uint8)
-            output_masks.append(component_mask[..., np.newaxis])  # Add channel dimension back
-    
+            output_masks.append(
+                component_mask[..., np.newaxis]
+            )  # Add channel dimension back
+
     # Stack all the output masks into a single array
     output_masks = np.stack(output_masks, axis=0)
-    
+
     return output_masks
+
 
 if __name__ == "__main__":
     # Create processor without initial bboxes
@@ -461,8 +470,10 @@ if __name__ == "__main__":
         sam2_checkpoint="related_projects/segment/checkpoints/sam2_hiera_large.pt",
     )
     import sys
+
     sys.path.append("utils")
     from debug_utils import visualize_and_save_masks
+
     # video_id = 'video_EiYKGXdvcmtlcl8xNTJfZXBfMTBfMDZfMDZfMjIQ-AIYmQMgCDDyCyogZjUyNTg1Mjg3YTE1NzZiODVkZmJjMjk5YjQ5ODExZmM='
     # video_id = 'video_EiQKGXdvcmtlcl8wMDFfZXBfMTRfMDZfMDZfMjIQIxguIAMw6AkqIGY1MjU4NTI4N2ExNTc2Yjg1ZGZiYzI5OWI0OTgxMWZj'
     # Initialize with text prompt to automatically detect objects
@@ -474,19 +485,19 @@ if __name__ == "__main__":
         image = cv2.resize(image, (640*2, 360*2))
         processor.reset(
             frame=image,
-            text_prompt="robot.object.",  # Adjust this prompt based on what objects you want to detect
+            text_prompt="object.robot.",  # Adjust this prompt based on what objects you want to detect
             confidence_threshold=0.05,
             id=i,
         )
         masks = processor.add_frame(image)
         masks //= masks.max()
         filtered_masks = masks
-        # filtered_masks = filter_out_overlapping_part_in_larger_ones(masks)
-        # filtered_masks = torch.from_numpy(filtered_masks).permute(0,3,1,2).unsqueeze(0)
-        # filtered_masks = filter_mask_by_area_ratio(filtered_masks, area_threshold=1e-4)
-        # filtered_masks = filtered_masks.squeeze(0).permute(0,2,3,1).numpy()
-        # filtered_masks = separate_connected_components(filtered_masks)
-        # filtered_masks = remove_all_zero_masks(filtered_masks)
+        filtered_masks = filter_out_overlapping_part_in_larger_ones(masks)
+        filtered_masks = torch.from_numpy(filtered_masks).permute(0,3,1,2).unsqueeze(0)
+        filtered_masks = filter_mask_by_area_ratio(filtered_masks, area_threshold=1e-4)
+        filtered_masks = filtered_masks.squeeze(0).permute(0,2,3,1).numpy()
+        filtered_masks = separate_connected_components(filtered_masks)
+        filtered_masks = remove_all_zero_masks(filtered_masks)
         image = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
         visualize_and_save_masks(filtered_masks, image, f"output_images/{i}_th_frame")
 
