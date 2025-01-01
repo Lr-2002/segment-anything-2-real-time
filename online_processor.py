@@ -486,18 +486,20 @@ if __name__ == "__main__":
         processor.reset(
             frame=frame,
             text_prompt="object.robot.",  # Adjust this prompt based on what objects you want to detect
-            confidence_threshold=0.05,
+            confidence_threshold=0.1,
             id=i,
         )
         masks = processor.add_frame(image)
         masks //= masks.max()
         filtered_masks = masks
-        # filtered_masks = filter_out_overlapping_part_in_larger_ones(masks)
-        # filtered_masks = torch.from_numpy(filtered_masks).permute(0,3,1,2).unsqueeze(0)
-        # filtered_masks = filter_mask_by_area_ratio(filtered_masks, area_threshold=1e-4)
-        # filtered_masks = filtered_masks.squeeze(0).permute(0,2,3,1).numpy()
-        # filtered_masks = separate_connected_components(filtered_masks)
-        # filtered_masks = remove_all_zero_masks(filtered_masks)
+        filtered_masks = filter_out_overlapping_part_in_larger_ones(masks)
+        filtered_masks = (
+            torch.from_numpy(filtered_masks).permute(0, 3, 1, 2).unsqueeze(0)
+        )
+        filtered_masks = filter_mask_by_area_ratio(filtered_masks, area_threshold=1e-4)
+        filtered_masks = filtered_masks.squeeze(0).permute(0, 2, 3, 1).numpy()
+        filtered_masks = separate_connected_components(filtered_masks)
+        filtered_masks = remove_all_zero_masks(filtered_masks)
         visualize_and_save_masks(filtered_masks, image, f"output_images/{i}_th_frame")
 
     # Process all images in directory

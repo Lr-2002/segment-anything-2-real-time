@@ -198,10 +198,10 @@ class GroundingDINOProcessor:
                     boxes = boxes[mask]
 
                     if len(boxes) > 0:
-                        # filtered_boxes, filtered_indices = self.update_bboxes(
-                        #     boxes, pil_image.size[0], pil_image.size[1]
-                        # )
-                        filtered_boxes = boxes
+                        filtered_boxes, filtered_indices = self.update_bboxes(
+                            boxes, pil_image.size[0], pil_image.size[1]
+                        )
+                        # filtered_boxes = boxes
                         obj_ids = list(range(len(filtered_boxes)))
                         return filtered_boxes, obj_ids
                     else:
