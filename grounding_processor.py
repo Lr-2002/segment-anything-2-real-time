@@ -54,7 +54,7 @@ class GroundingDINOProcessor:
         height_threshold = 0.01 * image_height
         width_threshold = 0.01 * image_width
         agents = []
-
+        
         # 找到靠近图像边界的边界框
         for i, bbox in enumerate(bboxes):
             x1, y1, x2, y2 = bbox
@@ -75,7 +75,7 @@ class GroundingDINOProcessor:
                 if i == j:
                     continue
                 ious = self.calculate_iou(bboxes[i], bboxes[j])
-                if i != j and (ious[0] > 0.9 or ious[1] > 0.9):
+                if i != j and (ious[0] > 0.7 or ious[1] > 0.7):
                     agents_to_remove.add(i)
                     break
 
@@ -198,10 +198,10 @@ class GroundingDINOProcessor:
                     boxes = boxes[mask]
 
                     if len(boxes) > 0:
-                        # filtered_boxes, filtered_indices = self.update_bboxes(
-                        #     boxes, pil_image.size[0], pil_image.size[1]
-                        # )
-                        filtered_boxes = boxes
+                        filtered_boxes, filtered_indices = self.update_bboxes(
+                            boxes, pil_image.size[0], pil_image.size[1]
+                        )
+                        # filtered_boxes = boxes
                         obj_ids = list(range(len(filtered_boxes)))
                         return filtered_boxes, obj_ids
                     else:
