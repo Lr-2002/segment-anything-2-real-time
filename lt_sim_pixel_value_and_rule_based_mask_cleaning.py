@@ -2,7 +2,7 @@ import numpy as np
 from scipy.ndimage import label
 import cv2
 from collections import defaultdict
-
+import torch
 
 def filter_out_overlapping_part_in_masks(masks, keep_larger=True):
     """
@@ -234,6 +234,7 @@ def split_mask_objects_in_same_color_by_brightness(image, mask, bright_threshold
     num_nonzero_pixels = np.count_nonzero(mask)
     
     split_masks = []
+    bright_threshold = int(255 * bright_threshold)
     
     for object_id in range(mask.shape[0]):
         # Convert the image to HSV
@@ -246,7 +247,7 @@ def split_mask_objects_in_same_color_by_brightness(image, mask, bright_threshold
             split_masks.append(mask[object_id][..., np.newaxis])
             continue
         
-        bright_threshold = int(255 * bright_threshold) # less is dark part, more is bright part
+         # less is dark part, more is bright part
         if object_id == 2:
             print(f"bright_threshold: {bright_threshold}")
         # Split the mask into bright and dark parts
@@ -258,8 +259,8 @@ def split_mask_objects_in_same_color_by_brightness(image, mask, bright_threshold
         
     
         # Label connected components in bright and dark parts
-        labeled_bright, num_bright = find_connected_components(bright_parts, tolerance=1)
-        labeled_dark, num_dark = find_connected_components(dark_parts, tolerance=1)
+        labeled_bright, num_bright = find_connected_components(bright_parts, tolerance=0)
+        labeled_dark, num_dark = find_connected_components(dark_parts, tolerance=0)
         
         # Determine which part has more components
         if num_bright > num_dark:
@@ -297,8 +298,6 @@ def remove_edge_lines(mask, length=4):
 
     return result & mask
 
-
-
 def get_robot_arm_by_color(image):
     """
     获取图像中的机械臂部分
@@ -316,7 +315,7 @@ def get_robot_arm_by_color(image):
         for c in range(image.shape[1]):
             if tuple(image[r, c].tolist()) in robot_arm_colors:
                 robot_arm_mask[r, c] = 1
-    robot_arm_mask = remove_edge_lines(robot_arm_mask,10)
+    robot_arm_mask = remove_edge_lines(robot_arm_mask,10)    
     robot_arm_mask = expand_mask_from_HW_to_NHWC(robot_arm_mask)
     return robot_arm_mask
 
@@ -424,7 +423,35 @@ def filter_out_panels(image, masks):
     filtered_masks = remove_all_zero_masks(masks)
     return filtered_masks
 
-def post_process_masks(image, object_masks, bright_threshold=0.75, single_size_threshold=0.95, resize_mask_to_accelerate=False):
+def filter_out_robot_arm_and_gray_background(image, masks):
+    """
+    Filter out masks that are entirely composed of gray only, implying they are background or robot arm.
+    This is done by checking if the mask is mostly gray.
+
+    Args:
+        image (np.ndarray): The input RGB image of shape (H, W, 3).
+        masks (np.ndarray): The input masks of shape (N, H, W, 1).
+
+    Returns:
+        np.ndarray: The filtered masks of shape (N, H, W, 1).
+    """
+    filtered_masks = np.zeros_like(masks)
+    # Convert the image to HSV color space
+    for i in range(masks.shape[0]):
+        mask = masks[i]
+        masked_image_flatten = torch.from_numpy(image*mask).reshape(-1, 3)
+        count= torch.where((masked_image_flatten[:,0] == masked_image_flatten[:,1]) & 
+                           (masked_image_flatten[:,1] == masked_image_flatten[:,2]) &
+                           masked_image_flatten[:,0] != 0, 1, 0).sum()
+        if count < 0.5 * mask.sum():
+            filtered_masks[i] = mask
+        
+        
+
+    filtered_masks = remove_all_zero_masks(filtered_masks)
+    return filtered_masks
+
+def clean_masks_by_pixel_values_and_rules(image, object_masks, bright_threshold=0.75, single_size_threshold=0.95, resize_mask_to_accelerate=False):
     """
     Post-process a set of object masks to remove unwanted regions.
 
@@ -449,6 +476,8 @@ def post_process_masks(image, object_masks, bright_threshold=0.75, single_size_t
     
     filtered_masks = filter_out_single_side_masks(resized_image, filtered_masks, bright_threshold=bright_threshold, single_size_threshold=single_size_threshold)
     filtered_masks = filter_out_overlapping_part_in_masks(filtered_masks)
+    
+    filtered_masks = filter_out_robot_arm_and_gray_background(resized_image, filtered_masks)
     
     filtered_masks = filter_mask_by_area_ratio(filtered_masks, area_threshold=1e-4)
 
