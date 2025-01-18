@@ -16,10 +16,11 @@ torch.autocast(device_type="cuda", dtype=torch.bfloat16).__enter__()
 #     torch.backends.cuda.matmul.allow_tf32 = True
 #     torch.backends.cudnn.allow_tf32 = True
 
-from sam2.build_sam import build_sam2_camera_predictor
-from grounding_processor import GroundingDINOProcessor
+from .sam2.build_sam import build_sam2_camera_predictor
+from .grounding_processor import GroundingDINOProcessor
 import time
 from collections import defaultdict
+
 
 class OnlineProcessor:
     def __init__(self, model_cfg, sam2_checkpoint):
@@ -376,8 +377,6 @@ def filter_mask_by_area_ratio(masks, area_threshold=0.001):
     N, H, W, C = masks.shape
     area_threshold = H * W * area_threshold  # Convert area ratio to absolute area
 
-
-
     # Initialize the output tensor
     filtered_masks = np.zeros_like(masks)
 
@@ -385,7 +384,7 @@ def filter_mask_by_area_ratio(masks, area_threshold=0.001):
     for n in range(N):
         for c in range(C):
             # Get the binary mask for the current frame
-            mask = masks[n,:,:, c]
+            mask = masks[n, :, :, c]
 
             # Label connected components in the mask
             labeled_mask, num_features = label(mask)
@@ -400,8 +399,7 @@ def filter_mask_by_area_ratio(masks, area_threshold=0.001):
 
                 # Retain the component only if its area is above the threshold
                 if component_area >= area_threshold:
-                    filtered_masks[n,:,:, c] += component
-
+                    filtered_masks[n, :, :, c] += component
 
     return filtered_masks
 
@@ -458,6 +456,7 @@ def separate_connected_components(input_masks):
 
     return output_masks
 
+
 def count_gray(image_hsv, mask=None):
     """
     计算图像中灰色像素的数量
@@ -472,10 +471,11 @@ def count_gray(image_hsv, mask=None):
     # 计算灰色像素的数量
     gray_mask = (0 < v_channel) & (s_channel < 128) & (h_channel < 30)
     if mask is not None:
-        gray_mask = gray_mask & mask[:,:,0]
+        gray_mask = gray_mask & mask[:, :, 0]
     gray_pixels = gray_mask.sum()
-        
+
     return gray_pixels
+
 
 def get_mask_part_with_same_x_coords(mask1, mask2):
     """
@@ -499,10 +499,12 @@ def get_mask_part_with_same_x_coords(mask1, mask2):
 
     return mask_part
 
+
 def expand_mask_from_HW_to_NHWC(mask):
     mask = np.expand_dims(mask, axis=0)  # 添加第一个维度
     mask = np.expand_dims(mask, axis=-1)  # 添加最后一个维度
     return mask
+
 
 def find_connected_components(mask, tolerance=2):
     """
@@ -518,62 +520,70 @@ def find_connected_components(mask, tolerance=2):
                - num_components: The total number of connected components.
     """
     # Create a structuring element for dilation (square of size (2 * tolerance + 1))
-    structuring_element = cv2.getStructuringElement(cv2.MORPH_RECT, (2 * tolerance + 1, 2 * tolerance + 1))
-    
+    structuring_element = cv2.getStructuringElement(
+        cv2.MORPH_RECT, (2 * tolerance + 1, 2 * tolerance + 1)
+    )
+
     # Dilate the mask to connect components within the tolerance
     dilated_mask = cv2.dilate(mask.astype(np.uint8), structuring_element)
-    
+
     # Find connected components in the dilated mask
     labeled_mask, num_components = label(dilated_mask)
-    
+
     return labeled_mask, num_components
+
 
 def split_mask_objects_in_same_color_by_brightness(image, mask):
     """
     Splits a binary mask into individual object masks, ensuring each object has a bright and dark part.
-    
+
     Args:
         image (np.ndarray): A 3D array representing the RGB image.
         mask (np.ndarray): A binary mask indicating the presence of objects in the image, shape (H, W, 1).
-        
+
     Returns:
         list: A list of binary masks, each containing a single object.
     """
     # Remove the last dimension of the mask if it is (H, W, 1)
     if mask.shape[-1] == 1:
         mask = mask.squeeze(-1)
-    
+
     masked_image = image * mask[..., np.newaxis]
     num_nonzero_pixels = np.count_nonzero(mask)
-    
+
     split_masks = []
-    
+
     for object_id in range(mask.shape[0]):
         # Convert the image to HSV
         image_hsv = cv2.cvtColor(masked_image[object_id], cv2.COLOR_RGB2HSV)
         object_mask = mask[object_id]
         gray_num = count_gray(image_hsv)
-        
+
         # If the mask is mostly gray( means this is a robot arm), return the original mask
         if gray_num > 0.5 * num_nonzero_pixels:
             split_masks.append(mask[object_id][..., np.newaxis])
             continue
-        
-        bright_threshold = int(255 * 0.75) # less is dark part, more is bright part
+
+        bright_threshold = int(255 * 0.75)  # less is dark part, more is bright part
         if object_id == 2:
             print(f"bright_threshold: {bright_threshold}")
         # Split the mask into bright and dark parts
         bright_parts = (image_hsv[:, :, 2] > bright_threshold) & object_mask
         dark_parts = ~bright_parts & object_mask
-        
-        bright_parts = filter_mask_by_area_ratio(expand_mask_from_HW_to_NHWC(bright_parts), area_threshold=1e-4)[0,:,:,0]
-        dark_parts = filter_mask_by_area_ratio(expand_mask_from_HW_to_NHWC(dark_parts), area_threshold=1e-4)[0,:,:,0]
-        
-    
+
+        bright_parts = filter_mask_by_area_ratio(
+            expand_mask_from_HW_to_NHWC(bright_parts), area_threshold=1e-4
+        )[0, :, :, 0]
+        dark_parts = filter_mask_by_area_ratio(
+            expand_mask_from_HW_to_NHWC(dark_parts), area_threshold=1e-4
+        )[0, :, :, 0]
+
         # Label connected components in bright and dark parts
-        labeled_bright, num_bright = find_connected_components(bright_parts, tolerance=1)
+        labeled_bright, num_bright = find_connected_components(
+            bright_parts, tolerance=1
+        )
         labeled_dark, num_dark = find_connected_components(dark_parts, tolerance=1)
-        
+
         # Determine which part has more components
         if num_bright > num_dark:
             larger_part, larger_num = labeled_bright, num_bright
@@ -581,35 +591,46 @@ def split_mask_objects_in_same_color_by_brightness(image, mask):
         else:
             larger_part, larger_num = labeled_dark, num_dark
             smaller_part = bright_parts
-        
+
         # Split the smaller part to match the number of components in the larger part
         for i in range(1, larger_num + 1):
             larger_component_mask = (larger_part == i).astype(np.uint8)
-            smaller_component_mask = get_mask_part_with_same_x_coords(larger_component_mask, smaller_part)
-            
+            smaller_component_mask = get_mask_part_with_same_x_coords(
+                larger_component_mask, smaller_part
+            )
+
             combined_mask = larger_component_mask | smaller_component_mask
             split_masks.append(combined_mask[..., np.newaxis])
-    
+
     return np.stack(split_masks)
 
+
 def remove_edge_lines(mask, length=4):
-    H,W = mask.shape
+    H, W = mask.shape
     result = np.zeros_like(mask)
     for r in range(H):
         for c in range(W):
             non_zero = 0
-            for dr, dc in [[-length//2,0],[length//2,0],[0,-length//2],[0,length//2]]:
-                r_start = r if dr > 0 else r+dr
-                r_end = r+dr if dr > 0 else r
-                c_start = c if dc > 0 else c+dc
-                c_end = c+dc if dc > 0 else c
-                if 0<=r+dr<H and 0<=c+dc<W and (mask[r_start:r_end+1, c_start:c_end+1] == 1).all():
+            for dr, dc in [
+                [-length // 2, 0],
+                [length // 2, 0],
+                [0, -length // 2],
+                [0, length // 2],
+            ]:
+                r_start = r if dr > 0 else r + dr
+                r_end = r + dr if dr > 0 else r
+                c_start = c if dc > 0 else c + dc
+                c_end = c + dc if dc > 0 else c
+                if (
+                    0 <= r + dr < H
+                    and 0 <= c + dc < W
+                    and (mask[r_start : r_end + 1, c_start : c_end + 1] == 1).all()
+                ):
                     non_zero += 1
-            if non_zero >=3:
-                result[r,c] = 1
+            if non_zero >= 3:
+                result[r, c] = 1
 
     return result & mask
-
 
 
 def get_robot_arm_by_color(image):
@@ -619,19 +640,20 @@ def get_robot_arm_by_color(image):
     :return: 机械臂部分的掩码，形状为 (H, W)
     """
     robot_arm_colors = set()
-    for i in range(75,256):
+    for i in range(75, 256):
         if i == 239:
             continue
         robot_arm_colors.add((i, i, i))
-    
+
     robot_arm_mask = np.zeros((image.shape[0], image.shape[1]), dtype=np.uint8)
     for r in range(image.shape[0]):
         for c in range(image.shape[1]):
             if tuple(image[r, c].tolist()) in robot_arm_colors:
                 robot_arm_mask[r, c] = 1
-    robot_arm_mask = remove_edge_lines(robot_arm_mask,10)
+    robot_arm_mask = remove_edge_lines(robot_arm_mask, 10)
     robot_arm_mask = expand_mask_from_HW_to_NHWC(robot_arm_mask)
     return robot_arm_mask
+
 
 def check_mask_all_in_center_panel(mask, polygon_points):
     """
@@ -641,21 +663,19 @@ def check_mask_all_in_center_panel(mask, polygon_points):
     :return: 布尔值，表示掩码是否完全在多边形内
     """
     points = np.array(polygon_points, dtype=np.int32)
-    
+
     # Create poly mask
     poly_mask = np.zeros(mask.shape, dtype=np.uint8)
-    
+
     # Draw filled polygon
     cv2.fillPoly(poly_mask, [points], 1)
-    
+
     outsize_panel = 1 - poly_mask
-    
-    
-    
-    return ((mask & outsize_panel)==0).all()
+
+    return ((mask & outsize_panel) == 0).all()
+
 
 def filter_object_masks_by_position(masks):
-
     # 创建一个空掩码数组
     result_masks = np.zeros_like(masks)
 
@@ -663,11 +683,11 @@ def filter_object_masks_by_position(masks):
     for i in range(masks.shape[0]):
         mask = masks[i]
         not_empty = mask.sum() > 0
-        
-        
-        if not_empty and check_mask_all_in_center_panel(mask, [(139, 37), (13, 334), (628, 334), (522, 37)]):
+
+        if not_empty and check_mask_all_in_center_panel(
+            mask, [(139, 37), (13, 334), (628, 334), (522, 37)]
+        ):
             result_masks[i] = mask
-            
 
     return result_masks
 
@@ -687,20 +707,20 @@ def filter_out_single_side_masks(image, masks):
     # Convert the image to HSV color space
     for i in range(masks.shape[0]):
         mask = masks[i]
-        masked_image = image*mask
+        masked_image = image * mask
         image_hsv = cv2.cvtColor(masked_image, cv2.COLOR_RGB2HSV)
 
         v_channel = image_hsv[:, :, 2]
         counter = defaultdict(int)
-        
+
         for r in range(v_channel.shape[0]):
             for c in range(v_channel.shape[1]):
-                if masked_image[r,c].sum() == 0:
+                if masked_image[r, c].sum() == 0:
                     continue
-                if v_channel[r,c] > 0.75 * 255:
-                    counter['bright'] += 1
+                if v_channel[r, c] > 0.75 * 255:
+                    counter["bright"] += 1
                 else:
-                    counter['dark'] += 1
+                    counter["dark"] += 1
         max_color_count = max(counter.values())
         if max_color_count < 0.8 * mask.sum():
             filtered_masks[i] = mask
@@ -708,12 +728,14 @@ def filter_out_single_side_masks(image, masks):
     filtered_masks = remove_all_zero_masks(filtered_masks)
     return filtered_masks
 
+
 def resize_masks(masks, new_height, new_width):
     resized = []
     for mask in masks:
         resized_mask = cv2.resize(mask, (new_width, new_height))
         resized.append(resized_mask[..., np.newaxis])
     return np.stack(resized)
+
 
 if __name__ == "__main__":
     # Create processor without initial bboxes
@@ -725,7 +747,9 @@ if __name__ == "__main__":
 
     sys.path.append("utils")
     from debug_utils import visualize_and_save_masks
-    from lt_sim_pixel_value_and_rule_based_mask_cleaning import clean_masks_by_pixel_values_and_rules
+    from lt_sim_pixel_value_and_rule_based_mask_cleaning import (
+        clean_masks_by_pixel_values_and_rules,
+    )
 
     # video_id = 'video_EiYKGXdvcmtlcl8xNTJfZXBfMTBfMDZfMDZfMjIQ-AIYmQMgCDDyCyogZjUyNTg1Mjg3YTE1NzZiODVkZmJjMjk5YjQ5ODExZmM='
     # video_id = 'video_EiQKGXdvcmtlcl8wMDFfZXBfMTRfMDZfMDZfMjIQIxguIAMw6AkqIGY1MjU4NTI4N2ExNTc2Yjg1ZGZiYzI5OWI0OTgxMWZj'
@@ -733,10 +757,12 @@ if __name__ == "__main__":
     image_path = "original_images"
     images = os.listdir(image_path)
     test = ["original_image_10.png"]
-    for i, image in enumerate(test):#images[-1:]):
-        image = cv2.imread("/home/ziheng/oawm_dev/output/original_image.png")#os.path.join(image_path, image))
+    for i, image in enumerate(test):  # images[-1:]):
+        image = cv2.imread(
+            "/home/ziheng/oawm_dev/output/original_image.png"
+        )  # os.path.join(image_path, image))
         # image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-        image = cv2.resize(image, (640, 360))#(480, 480))#(640, 360)
+        image = cv2.resize(image, (640, 360))  # (480, 480))#(640, 360)
         processor.reset(
             frame=image,
             text_prompt="robot.object.",  # Adjust this prompt based on what objects you want to detect
@@ -744,7 +770,7 @@ if __name__ == "__main__":
             id=i,
         )
         masks = processor.add_frame(image)
-        
+
         filtered_masks = clean_masks_by_pixel_values_and_rules(image, masks)
         image = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
 
