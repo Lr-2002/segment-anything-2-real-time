@@ -501,4 +501,7 @@ def clean_masks_by_pixel_values_and_rules(image, object_masks, bright_threshold=
     filtered_masks = np.stack([robot_masks[0], *[mask for mask in filtered_masks]])
     end_time = time()
     print(f"Post-process time: {end_time - start_time}")
+    
+    if filtered_masks.max() > 1:
+        filtered_masks = filtered_masks / 255
     return filtered_masks
